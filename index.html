@@ -18,23 +18,23 @@
         input, select, button { padding: 12px; border-radius: 12px; border: 1px solid #f0f0f0; font-size: 14px; outline: none; }
         button { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; font-weight: bold; cursor: pointer; }
         
-        /* AI 狀態 */
         #ocrStatus { display: none; color: #ff758c; font-size: 12px; text-align: center; margin-top: 5px; font-weight: bold; padding: 10px; background: #fff0f3; border-radius: 10px; }
 
         /* 🔍 篩選過濾區 */
         .filter-section { margin-top: 25px; background: #fef0f3; padding: 15px; border-radius: 18px; border: 1px solid #ffafbd; }
         .filter-title { font-size: 13px; font-weight: bold; color: #ff758c; margin-bottom: 10px; display: block; }
-        .filter-controls { display: flex; gap: 8px; }
-        .filter-controls select { flex: 1; background: white; border-color: #ffc3a0; }
+        .filter-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+        .filter-controls select { background: white; border-color: #ffc3a0; padding: 8px; font-size: 12px; }
 
-        /* 衣物卡片網格 */
+        /* 衣物卡片 */
         .closet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .item-card { background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.03); border: 1px solid #eee; position: relative; }
         .item-card img { width: 100%; height: 140px; object-fit: cover; background: #f9f9f9; }
         .item-info { padding: 12px; font-size: 13px; line-height: 1.5; }
         .item-name { font-weight: bold; color: #ff758c; font-size: 14px; display: block; }
+        .color-tag { font-size: 11px; padding: 2px 6px; border-radius: 10px; background: #eee; margin-left: 5px; vertical-align: middle; }
+        
         .loading-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:100; justify-content:center; align-items:center; font-weight: bold; color: #ff758c; }
-        .highlight { border: 2px solid #ff758c !important; }
     </style>
 </head>
 <body>
@@ -43,15 +43,15 @@
 
 <div class="container">
     <h1>👶 寶寶雲端衣櫥</h1>
-    <p class="subtitle">AI 辨識 + 雲端同步 + 快速篩選</p>
+    <p class="subtitle">AI 辨識 + 雲端同步 + 顏色管理</p>
     
     <div class="input-group">
         <input type="text" id="itemName" class="full-width" placeholder="物品名稱">
         
         <div class="full-width">
-            <label style="font-size: 12px; color: #ff758c;">📷 拍下標籤自動填寫 (金額/尺寸)：</label>
+            <label style="font-size: 12px; color: #ff758c;">📷 拍下標籤自動填寫：</label>
             <input type="file" id="itemImg" class="full-width" accept="image/*" onchange="aiScan(this)">
-            <div id="ocrStatus">AI 正在讀取標籤...🧬</div>
+            <div id="ocrStatus">AI 正在掃描中...🧬</div>
         </div>
 
         <select id="itemSize">
@@ -59,7 +59,13 @@
             <option value="NB">NB</option><option value="60cm">60cm</option>
             <option value="70cm">70cm</option><option value="80cm">80cm</option>
             <option value="90cm">90cm</option><option value="100cm+">100cm+</option>
-            <option value="鞋子11-13cm">鞋子11-13cm</option>
+        </select>
+
+        <select id="itemColor">
+            <option value="未標記">顏色</option>
+            <option value="深色">深色</option>
+            <option value="淺色">淺色</option>
+            <option value="多色">多色</option>
         </select>
 
         <select id="itemCategory">
@@ -84,13 +90,17 @@
         <span class="filter-title">🔍 快速撈選現有衣服</span>
         <div class="filter-controls">
             <select id="filterSize" onchange="renderGrid()">
-                <option value="all">所有尺寸</option>
+                <option value="all">尺寸</option>
                 <option value="NB">NB</option><option value="60cm">60cm</option>
                 <option value="70cm">70cm</option><option value="80cm">80cm</option>
                 <option value="90cm">90cm</option><option value="100cm+">100cm+</option>
             </select>
+            <select id="filterColor" onchange="renderGrid()">
+                <option value="all">顏色</option>
+                <option value="深色">深色</option><option value="淺色">淺色</option><option value="多色">多色</option>
+            </select>
             <select id="filterCat" onchange="renderGrid()">
-                <option value="all">所有類別</option>
+                <option value="all">類別</option>
                 <option value="包屁衣">包屁衣</option><option value="連身裝">連身裝</option>
                 <option value="上衣/褲裙">上衣/褲裙</option><option value="外套">外套</option>
                 <option value="鞋子">鞋子</option>
@@ -102,33 +112,33 @@
 </div>
 
 <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbz-Qd6vcfjy64FKL3xlD8wxoeHdYiUkQHi9PgDdzpD6aWExDxz79OmNKzYmXZoWVpe1tg/exec"; // ⚠️ 重要：請在此處換上你的 Google Apps Script 網址
-    let allItems = []; // 存儲從雲端抓下來的所有原始資料
+    // ⚠️ 請記得在這裡補上你的 API URL
+    const API_URL = "https://script.google.com/macros/s/AKfycbz-Qd6vcfjy64FKL3xlD8wxoeHdYiUkQHi9PgDdzpD6aWExDxz79OmNKzYmXZoWVpe1tg/exec"; 
+    let allItems = []; 
 
-    // 1. 從雲端讀取資料
     async function loadData() {
         document.getElementById('loading').style.display = 'flex';
         try {
             const response = await fetch(API_URL);
             allItems = await response.json();
-            renderGrid(); // 抓完資料後進行渲染
-        } catch (e) {
-            console.error("讀取失敗", e);
-        }
+            renderGrid();
+        } catch (e) { console.error("讀取失敗", e); }
         document.getElementById('loading').style.display = 'none';
     }
 
-    // 2. 渲染畫面（包含篩選邏輯）
     function renderGrid() {
         const grid = document.getElementById('closetGrid');
         const fSize = document.getElementById('filterSize').value;
+        const fColor = document.getElementById('filterColor').value;
         const fCat = document.getElementById('filterCat').value;
         grid.innerHTML = '';
 
         const filtered = allItems.filter(item => {
             const matchSize = (fSize === 'all' || item[1] === fSize);
             const matchCat = (fCat === 'all' || item[2] === fCat);
-            return matchSize && matchCat;
+            // 假設顏色存放在原本 payload 的 status 位置或新增位置，這裡為了不改動 Google 腳本，我將顏色與類別合併處理或暫存
+            const matchColor = (fColor === 'all' || item[4] === fColor); 
+            return matchSize && matchCat && matchColor;
         });
 
         filtered.forEach(item => {
@@ -137,7 +147,7 @@
                 <div class="item-card">
                     <img src="${item[6] || 'https://via.placeholder.com/150'}">
                     <div class="item-info">
-                        <span class="item-name">${item[0]}</span>
+                        <span class="item-name">${item[0]} <span class="color-tag">${item[4]}</span></span>
                         📏 尺寸：${item[1]}<br>
                         🏷️ 類別：${item[2]}<br>
                         💰 價格：${priceText}
@@ -150,7 +160,6 @@
         }
     }
 
-    // 3. AI 掃描
     async function aiScan(input) {
         const file = input.files[0];
         if (!file) return;
@@ -159,21 +168,16 @@
         statusDiv.innerText = "🧬 AI 掃描中...";
 
         Tesseract.recognize(file, 'eng+chi_tra').then(({ data: { text } }) => {
-            // 辨識尺寸
             const sizes = ["60", "70", "80", "90", "100"];
             sizes.forEach(s => { if(text.includes(s)) document.getElementById('itemSize').value = s + "cm"; });
-            // 辨識金額
             const nums = text.match(/\d{3,}/g);
             if(nums) document.getElementById('itemPrice').value = Math.max(...nums.map(Number));
-            // 辨識幣別
             if(text.includes("¥") || text.includes("JPY")) document.getElementById('itemCurrency').value = "JPY";
-            
             statusDiv.innerText = "✅ 辨識完成！";
             setTimeout(() => statusDiv.style.display = 'none', 3000);
         });
     }
 
-    // 4. 新增資料到雲端
     async function addItem() {
         const name = document.getElementById('itemName').value;
         if(!name) return alert("請輸入名稱");
@@ -188,7 +192,7 @@
                 size: document.getElementById('itemSize').value,
                 cat: document.getElementById('itemCategory').value,
                 price: document.getElementById('itemPrice').value,
-                status: "全新",
+                status: document.getElementById('itemColor').value, // 將顏色存入原有的 status 欄位
                 currency: document.getElementById('itemCurrency').value,
                 img: base64
             };
@@ -200,9 +204,7 @@
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = () => upload(reader.result);
-        } else {
-            upload("");
-        }
+        } else { upload(""); }
     }
 
     loadData();
